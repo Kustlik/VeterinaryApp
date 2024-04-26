@@ -2,7 +2,6 @@ package pl.gr.veterinaryapp.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,7 +11,6 @@ import pl.gr.veterinaryapp.exception.ResourceNotFoundException;
 import pl.gr.veterinaryapp.model.dto.AvailableVisitDto;
 import pl.gr.veterinaryapp.model.dto.VisitEditDto;
 import pl.gr.veterinaryapp.model.dto.VisitRequestDto;
-import pl.gr.veterinaryapp.model.entity.Client;
 import pl.gr.veterinaryapp.model.entity.Pet;
 import pl.gr.veterinaryapp.model.entity.TreatmentRoom;
 import pl.gr.veterinaryapp.model.entity.Vet;
@@ -22,6 +20,8 @@ import pl.gr.veterinaryapp.repository.TreatmentRoomRepository;
 import pl.gr.veterinaryapp.repository.VetRepository;
 import pl.gr.veterinaryapp.repository.VisitRepository;
 import pl.gr.veterinaryapp.service.VisitService;
+import pl.gr.veterinaryapp.service.impl.validator.UserValidator;
+import pl.gr.veterinaryapp.service.impl.validator.VisitValidator;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -37,8 +37,8 @@ import java.util.stream.Collectors;
 @Service
 public class VisitServiceImpl implements VisitService {
 
-    private static final int MINIMAL_TIME_TO_VISIT = 60;
-
+    private final UserValidator userValidator;
+    private final VisitValidator visitValidator;
     private final VisitRepository visitRepository;
     private final VetRepository vetRepository;
     private final PetRepository petRepository;
@@ -47,12 +47,9 @@ public class VisitServiceImpl implements VisitService {
 
     @Override
     public Visit getVisitById(User user, long id) {
-        Visit visit = visitRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Visit visit = getVisit(id);
 
-        if (!isUserAuthorized(user, visit.getPet().getClient())) {
-            throw new ResourceNotFoundException("Wrong id.");
-        }
+        userValidator.validateUserAuthorization(user, visit.getPet().getClient());
 
         return visit;
     }
@@ -61,7 +58,7 @@ public class VisitServiceImpl implements VisitService {
     public List<Visit> getAllVisits(User user) {
         return visitRepository.findAll()
                 .stream()
-                .filter(visit -> isUserAuthorized(user, visit.getPet().getClient()))
+                .filter(visit -> userValidator.isUserAuthorized(user, visit.getPet().getClient()))
                 .collect(Collectors.toList());
     }
 
@@ -75,14 +72,12 @@ public class VisitServiceImpl implements VisitService {
         Vet vet = vetRepository.findById(vetId)
                 .orElseThrow(() -> new IncorrectDataException("Wrong vet id."));
 
-        validateVisitDate(vetId, startDateTime, duration);
+        visitValidator.validateVisitDate(vetId, startDateTime, duration);
 
         Pet pet = petRepository.findById(visitRequestDto.getPetId())
                 .orElseThrow(() -> new IncorrectDataException("Wrong pet id."));
 
-        if (!isUserAuthorized(user, pet.getClient())) {
-            throw new ResourceNotFoundException("Wrong id.");
-        }
+        userValidator.isUserAuthorized(user, pet.getClient());
 
         var treatmentRoom = getFreeTreatmentRoom(startDateTime, duration)
                 .orElseThrow(() -> new IncorrectDataException("There is no free treatment room."));
@@ -91,6 +86,13 @@ public class VisitServiceImpl implements VisitService {
             throw new IncorrectDataException("This vet doesn't work at this hour.");
         }
 
+        var newVisit = getNewVisit(visitRequestDto, pet, vet, startDateTime, duration, treatmentRoom);
+
+        return visitRepository.save(newVisit);
+    }
+
+    private static Visit getNewVisit(
+            VisitRequestDto visitRequestDto, Pet pet, Vet vet, OffsetDateTime startDateTime, Duration duration, TreatmentRoom treatmentRoom) {
         var newVisit = new Visit();
         newVisit.setPet(pet);
         newVisit.setVet(vet);
@@ -101,24 +103,7 @@ public class VisitServiceImpl implements VisitService {
         newVisit.setVisitStatus(VisitStatus.SCHEDULED);
         newVisit.setOperationType(visitRequestDto.getOperationType());
         newVisit.setTreatmentRoom(treatmentRoom);
-
-        return visitRepository.save(newVisit);
-    }
-
-    private void validateVisitDate(long vetId, OffsetDateTime startDateTime, Duration duration) {
-        var nowZoned = OffsetDateTime.now(systemClock);
-
-        if (startDateTime.isBefore(nowZoned)) {
-            throw new IncorrectDataException("Visit startDateTime need to be in future.");
-        }
-
-        if (Duration.between(nowZoned, startDateTime).toMinutes() < MINIMAL_TIME_TO_VISIT) {
-            throw new IncorrectDataException("The time to your visit is too short.");
-        }
-
-        if (visitRepository.findAllOverlapping(vetId, startDateTime, startDateTime.plus(duration)).size() != 0) {
-            throw new IncorrectDataException("This date is not available.");
-        }
+        return newVisit;
     }
 
     private Optional<TreatmentRoom> getFreeTreatmentRoom(OffsetDateTime startDateTime, Duration duration) {
@@ -140,8 +125,7 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     @Override
     public Visit finalizeVisit(VisitEditDto visitEditDto) {
-        Visit visit = visitRepository.findById(visitEditDto.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Visit visit = getVisit(visitEditDto.getId());
         if (visitEditDto.getVisitStatus() == VisitStatus.FINISHED
                 || visitEditDto.getVisitStatus() == VisitStatus.DID_NOT_APPEAR
                 || visitEditDto.getVisitStatus() == VisitStatus.CANCELLED) {
@@ -154,12 +138,15 @@ public class VisitServiceImpl implements VisitService {
     @Transactional
     @Override
     public void deleteVisit(long id) {
-        Visit result = visitRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Visit result = getVisit(id);
         visitRepository.delete(result);
     }
 
-    @Transactional
+    private Visit getVisit(long id) {
+        return visitRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+    }
+
     @Override
     public List<AvailableVisitDto> getAvailableVisits(
             OffsetDateTime startDateTime,
@@ -175,7 +162,7 @@ public class VisitServiceImpl implements VisitService {
         List<AvailableVisitDto> result = new ArrayList<>();
 
         var visitSlotStart = startDateTime;
-        while (visitSlotStart.compareTo(endDateTime) < 0) {
+        while (visitSlotStart.isBefore(endDateTime)) {
             var visitSlotEnd = visitSlotStart.plusMinutes(15);
 
             var busyVetIds = getBusyVetIds(visits, visitSlotStart, visitSlotEnd);
@@ -208,8 +195,8 @@ public class VisitServiceImpl implements VisitService {
         return visits
                 .stream()
                 .filter(visit ->
-                        visitSlotStart.compareTo(visit.getStartDateTime()) >= 0
-                                && visitSlotEnd.compareTo(visit.getEndDateTime()) <= 0)
+                        !visitSlotStart.isBefore(visit.getStartDateTime())
+                                && !visitSlotEnd.isAfter(visit.getEndDateTime()))
                 .map(Visit::getVet)
                 .map(Vet::getId)
                 .collect(Collectors.toList());
@@ -221,8 +208,8 @@ public class VisitServiceImpl implements VisitService {
         return vets
                 .stream()
                 .filter(vet ->
-                        visitSlotStart.toOffsetTime().compareTo(vet.getWorkStartTime()) >= 0
-                                && visitSlotEnd.toOffsetTime().compareTo(vet.getWorkEndTime()) <= 0)
+                        !visitSlotStart.toOffsetTime().isBefore(vet.getWorkStartTime())
+                                && !visitSlotEnd.toOffsetTime().isAfter(vet.getWorkEndTime()))
                 .map(Vet::getId)
                 .collect(Collectors.toList());
     }
@@ -236,21 +223,6 @@ public class VisitServiceImpl implements VisitService {
         for (var visit : visits) {
             visit.setVisitStatus(VisitStatus.EXPIRED);
         }
-    }
-
-    private boolean isUserAuthorized(User user, Client client) {
-        boolean isClient = user.getAuthorities()
-                .stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch("ROLE_CLIENT"::equalsIgnoreCase);
-        if (isClient) {
-            if (client.getUser() == null) {
-                return false;
-            } else {
-                return client.getUser().getUsername().equalsIgnoreCase(user.getUsername());
-            }
-        }
-        return true;
     }
 
     public boolean isTimeBetweenIncludingEndPoints(OffsetTime min, OffsetTime max, OffsetDateTime date) {

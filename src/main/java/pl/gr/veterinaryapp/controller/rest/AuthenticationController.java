@@ -26,7 +26,7 @@ public class AuthenticationController {
         return tokenService.register(loginUser);
     }
 
-    @PostMapping("/log-out")
+    @PostMapping("/logout")
     public void logout(HttpServletRequest req) {
         String tokenHeader = req.getHeader(AUTH_HEADER_NAME);
         tokenService.logout(tokenHeader);

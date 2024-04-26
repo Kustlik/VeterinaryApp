@@ -6,7 +6,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.gr.veterinaryapp.exception.IncorrectDataException;
-import pl.gr.veterinaryapp.exception.ResourceNotFoundException;
 import pl.gr.veterinaryapp.model.dto.UserDto;
 import pl.gr.veterinaryapp.model.entity.Role;
 import pl.gr.veterinaryapp.model.entity.VetAppUser;
@@ -29,8 +28,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public VetAppUser getUser(long id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        return getVetAppUser(id);
     }
 
     @Override
@@ -50,8 +48,12 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void deleteUser(long id) {
-        var user = userRepository.findById(id)
-                .orElseThrow(() -> new UsernameNotFoundException("Wrong id."));
+        var user = getVetAppUser(id);
         userRepository.delete(user);
+    }
+
+    private VetAppUser getVetAppUser(long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new UsernameNotFoundException("Wrong id."));
     }
 }

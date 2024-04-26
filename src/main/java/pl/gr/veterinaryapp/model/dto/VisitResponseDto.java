@@ -1,11 +1,6 @@
 package pl.gr.veterinaryapp.model.dto;
 
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.springframework.hateoas.RepresentationModel;
 import pl.gr.veterinaryapp.common.OperationType;
 import pl.gr.veterinaryapp.common.VisitStatus;
