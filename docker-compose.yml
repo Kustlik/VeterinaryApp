@@ -21,3 +21,9 @@ services:
       POSTGRES_DB: mydb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123
+    volumes:
+      - postgres_data:/var/lib/postgresql/veterinaryapp/data
+
+volumes:
+  postgres_data:
+    driver: local
