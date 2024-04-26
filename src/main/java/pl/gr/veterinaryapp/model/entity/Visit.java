@@ -9,15 +9,7 @@ import pl.gr.veterinaryapp.common.OperationType;
 import pl.gr.veterinaryapp.common.VisitStatus;
 import pl.gr.veterinaryapp.common.VisitType;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
-import javax.persistence.Transient;
+import javax.persistence.*;
 import javax.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.Duration;

@@ -2,16 +2,9 @@ package pl.gr.veterinaryapp.controller.rest;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.hateoas.Link;
-import org.springframework.hateoas.MediaTypes;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import pl.gr.veterinaryapp.mapper.PetMapper;
 import pl.gr.veterinaryapp.model.dto.PetRequestDto;
 import pl.gr.veterinaryapp.model.dto.PetResponseDto;
@@ -28,23 +21,23 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 public class PetRestController {
 
     private final PetService petService;
-    private final PetMapper mapper;
+    private final PetMapper petMapper;
 
-    @DeleteMapping(path = "/{id}")
+    @DeleteMapping("/{id}")
     public void delete(@PathVariable int id) {
         petService.deletePet(id);
     }
 
-    @GetMapping(path = "/{id}", produces = MediaTypes.HAL_JSON_VALUE)
+    @GetMapping("/{id}")
     public PetResponseDto getPet(@AuthenticationPrincipal User user, @PathVariable long id) {
-        var pet = mapper.map(petService.getPetById(user, id));
+        var pet = petMapper.toPetResponseDto(petService.getPetById(user, id));
         addLinks(pet);
         return pet;
     }
 
-    @GetMapping(produces = MediaTypes.HAL_JSON_VALUE)
+    @GetMapping
     public List<PetResponseDto> getAllPets(@AuthenticationPrincipal User user) {
-        var pets = mapper.mapAsList(petService.getAllPets(user));
+        var pets = petMapper.toPetResponseDtoList(petService.getAllPets(user));
 
         for (var pet : pets) {
             addLinks(pet);
@@ -56,11 +49,11 @@ public class PetRestController {
         return pets;
     }
 
-    @PostMapping(produces = MediaTypes.HAL_JSON_VALUE)
+    @PostMapping
     public PetResponseDto createPet(@AuthenticationPrincipal User user, @RequestBody PetRequestDto petRequestDto) {
         System.out.println(user);
 
-        var pet = mapper.map(petService.createPet(user, petRequestDto));
+        var pet = petMapper.toPetResponseDto(petService.createPet(user, petRequestDto));
         addLinks(pet);
         return pet;
     }

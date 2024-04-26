@@ -18,12 +18,11 @@ import java.util.List;
 public class AnimalServiceImpl implements AnimalService {
 
     private final AnimalRepository animalRepository;
-    private final AnimalMapper mapper;
+    private final AnimalMapper animalMapper;
 
     @Override
     public Animal getAnimalById(long id) {
-        return animalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        return getAnimal(id);
     }
 
     @Transactional
@@ -34,15 +33,19 @@ public class AnimalServiceImpl implements AnimalService {
             throw new IncorrectDataException("Species exists.");
         }
 
-        return animalRepository.save(mapper.map(animalRequestDto));
+        return animalRepository.save(animalMapper.toAnimal(animalRequestDto));
     }
 
     @Transactional
     @Override
     public void deleteAnimal(long id) {
-        Animal animal = animalRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Animal animal = getAnimal(id);
         animalRepository.delete(animal);
+    }
+
+    private Animal getAnimal(long id) {
+        return animalRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
     }
 
     @Override

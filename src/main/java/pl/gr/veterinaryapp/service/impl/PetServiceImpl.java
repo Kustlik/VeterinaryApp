@@ -1,7 +1,6 @@
 package pl.gr.veterinaryapp.service.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +14,7 @@ import pl.gr.veterinaryapp.repository.AnimalRepository;
 import pl.gr.veterinaryapp.repository.ClientRepository;
 import pl.gr.veterinaryapp.repository.PetRepository;
 import pl.gr.veterinaryapp.service.PetService;
+import pl.gr.veterinaryapp.service.impl.validator.UserValidator;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 @Service
 public class PetServiceImpl implements PetService {
 
+    private final UserValidator userValidator;
     private final PetRepository petRepository;
     private final ClientRepository clientRepository;
     private final AnimalRepository animalRepository;
@@ -31,18 +32,15 @@ public class PetServiceImpl implements PetService {
     public List<Pet> getAllPets(User user) {
         return petRepository.findAll()
                 .stream()
-                .filter(pet -> isUserAuthorized(user, pet.getClient()))
+                .filter(pet -> userValidator.isUserAuthorized(user, pet.getClient()))
                 .collect(Collectors.toList());
     }
 
     @Override
     public Pet getPetById(User user, long id) {
-        Pet pet = petRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Pet pet = getPet(id);
 
-        if (!isUserAuthorized(user, pet.getClient())) {
-            throw new ResourceNotFoundException("Wrong id.");
-        }
+        userValidator.isUserAuthorized(user, pet.getClient());
 
         return pet;
     }
@@ -63,39 +61,33 @@ public class PetServiceImpl implements PetService {
         Client client = clientRepository.findById(petRequestDto.getClientId())
                 .orElseThrow(() -> new IncorrectDataException("Wrong client id."));
 
-        if (!isUserAuthorized(user, client)) {
+        if (!userValidator.isUserAuthorized(user, client)) {
             throw new ResourceNotFoundException("User don't have access to this pet");
         }
 
+        var newPet = getNewPet(petRequestDto, animal, client);
+
+        return petRepository.save(newPet);
+    }
+
+    private static Pet getNewPet(PetRequestDto petRequestDto, Animal animal, Client client) {
         var newPet = new Pet();
         newPet.setName(petRequestDto.getName());
         newPet.setBirthDate(petRequestDto.getBirthDate());
         newPet.setAnimal(animal);
         newPet.setClient(client);
-
-        return petRepository.save(newPet);
+        return newPet;
     }
 
     @Transactional
     @Override
     public void deletePet(long id) {
-        Pet result = petRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Pet result = getPet(id);
         petRepository.delete(result);
     }
 
-    private boolean isUserAuthorized(User user, Client client) {
-        boolean isClient = user.getAuthorities()
-                .stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch("ROLE_CLIENT"::equalsIgnoreCase);
-        if (isClient) {
-            if (client.getUser() == null) {
-                return false;
-            } else {
-                return client.getUser().getUsername().equalsIgnoreCase(user.getUsername());
-            }
-        }
-        return true;
+    private Pet getPet(long id) {
+        return petRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
     }
 }

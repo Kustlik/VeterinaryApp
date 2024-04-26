@@ -20,14 +20,12 @@ import java.util.List;
 public class ClientServiceImpl implements ClientService {
 
     private final ClientRepository clientRepository;
-    private final ClientMapper mapper;
+    private final ClientMapper clientMapper;
     private final UserRepository userRepository;
 
     @Override
     public Client getClientById(long id) {
-        System.out.println("XXX");
-        return clientRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        return getClient(id);
     }
 
     @Override
@@ -45,7 +43,7 @@ public class ClientServiceImpl implements ClientService {
         VetAppUser user = userRepository.findByUsername(clientRequestDTO.getUsername())
                 .orElse(null);
 
-        Client client = mapper.map(clientRequestDTO);
+        Client client = clientMapper.toClient(clientRequestDTO);
         client.setUser(user);
 
         return clientRepository.save(client);
@@ -54,8 +52,12 @@ public class ClientServiceImpl implements ClientService {
     @Transactional
     @Override
     public void deleteClient(long id) {
-        Client result = clientRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
+        Client result = getClient(id);
         clientRepository.delete(result);
+    }
+
+    private Client getClient(long id) {
+        return clientRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Wrong id."));
     }
 }
